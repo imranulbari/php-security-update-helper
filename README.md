@@ -84,6 +84,14 @@ managed PHP must be updated through their respective vendors.
    .\php_update.ps1
    ```
 
+   The default check displays progress while it checks `PATH` and common PHP
+   installation paths. If PHP is installed in a nonstandard location, use the
+   slower exhaustive scan instead:
+
+   ```powershell
+   .\php_update.ps1 -DeepScan
+   ```
+
 3. Verify the affected application's PHP distribution and fixed-version guidance.
    PHP installed by XAMPP, WampServer, an IIS application, a manually extracted
    ZIP, or a hosting/control-panel product must be upgraded through that product.

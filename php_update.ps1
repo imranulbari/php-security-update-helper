@@ -1,7 +1,8 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [switch]$Apply,
-    [switch]$RestartServices
+    [switch]$RestartServices,
+    [switch]$DeepScan
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,18 +21,55 @@ function Get-PhpExecutables {
         $candidates += $command.Source
     }
 
-    $roots = @(
-        $env:ProgramFiles,
-        ${env:ProgramFiles(x86)},
-        $env:LOCALAPPDATA,
-        'C:\php'
-    ) | Where-Object { $_ -and (Test-Path $_) }
+    $candidatePaths = @(
+        'C:\php\php.exe',
+        'C:\tools\php\php.exe',
+        'C:\xampp\php\php.exe',
+        (Join-Path $env:ProgramFiles 'PHP\php.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'PHP\php.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\PHP\php.exe'),
+        (Join-Path $env:USERPROFILE 'scoop\apps\php\current\php.exe'),
+        'C:\ProgramData\chocolatey\lib\php\tools\php.exe'
+    ) | Where-Object { $_ }
 
-    foreach ($root in $roots) {
-        $candidates += Get-ChildItem -Path $root -Filter php.exe -File -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty FullName
+    $bundleRoots = @(
+        'C:\wamp64\bin\php',
+        'C:\wamp\bin\php',
+        'C:\laragon\bin\php'
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+
+    foreach ($bundleRoot in $bundleRoots) {
+        $candidatePaths += Get-ChildItem -LiteralPath $bundleRoot -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'php.exe' }
     }
 
+    Write-Host 'Discovering php.exe in PATH and common installation locations...'
+    $index = 0
+    foreach ($candidatePath in $candidatePaths) {
+        $index++
+        Write-Progress -Activity 'Discovering PHP installations' `
+            -Status "Checking $candidatePath" `
+            -PercentComplete (($index / $candidatePaths.Count) * 100)
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+            $candidates += (Resolve-Path -LiteralPath $candidatePath).Path
+        }
+    }
+
+    if ($DeepScan) {
+        $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA) |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) }
+        $index = 0
+        foreach ($root in $roots) {
+            $index++
+            Write-Progress -Activity 'Deep scanning for PHP installations' `
+                -Status "Scanning $root; this can take several minutes" `
+                -PercentComplete (($index / $roots.Count) * 100)
+            $candidates += Get-ChildItem -LiteralPath $root -Filter php.exe -File -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName
+        }
+    }
+
+    Write-Progress -Activity 'Discovering PHP installations' -Completed
     $candidates | Sort-Object -Unique
 }
 
